@@ -20,6 +20,7 @@ QW.Window {
     readonly property int larguraRecolhida: 10
     readonly property int invasaoMinima: 60   // px de janela sobre a pilha para recolher
     readonly property int duracao: 200
+    readonly property int tempoEspiada: 4000  // ms visível ao chegar pedido de atenção
     // Kirigami.Theme não segue o tema dentro do KWin; cor fixa.
     readonly property color corDestaque: "#4a90d9"
     readonly property color corAtencao: "#f0a030"
@@ -31,8 +32,20 @@ QW.Window {
     property var contadores: ({})
     property bool sobreposta: false
     readonly property bool aberta: hover.hovered || segurarAberta.running
-    readonly property bool recolhida: sobreposta && !aberta
-    readonly property bool pedeAtencao: minimizadas.some(w => w.demandsAttention)
+    readonly property bool recolhida: sobreposta && !aberta && !espiada.running
+    readonly property int nAtencao: minimizadas.filter(w => w.demandsAttention).length
+    readonly property bool pedeAtencao: nAtencao > 0
+    property int nAtencaoAntes: 0
+    // pedido novo: mostra a pilha mesmo coberta por alguns segundos
+    onNAtencaoChanged: {
+        if (nAtencao > nAtencaoAntes)
+            espiada.restart();
+        nAtencaoAntes = nAtencao;
+    }
+    Timer {
+        id: espiada
+        interval: palco.tempoEspiada
+    }
     readonly property var area: Workspace.clientArea(KWin.PlacementArea, Workspace.activeScreen, Workspace.currentDesktop)
 
     readonly property int alturaCartao: alturaMiniatura + (aberta ? 22 : 0)
