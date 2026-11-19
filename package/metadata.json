@@ -5,7 +5,7 @@
         "Description": "Miniaturas das janelas minimizadas na lateral esquerda (estilo Stage Manager)",
         "Icon": "window-minimize",
         "Id": "org.sylvio.palco",
-        "License": "GPL",
+        "License": "GPL-3.0-or-later",
         "Name": "Palco",
         "Version": "0.1"
     },
