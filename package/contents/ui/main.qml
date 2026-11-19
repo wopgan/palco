@@ -20,6 +20,7 @@ QW.Window {
     readonly property int larguraRecolhida: 10
     readonly property int invasaoMinima: 60   // px de janela sobre a pilha para recolher
     readonly property int duracao: 200
+    readonly property real opacidadeRepouso: 0.55  // pilha sem mouse e sem pedido de atenção
     readonly property int tempoEspiada: 4000  // ms visível ao chegar pedido de atenção
     // Kirigami.Theme não segue o tema dentro do KWin; cor fixa.
     readonly property color corDestaque: "#4a90d9"
@@ -220,6 +221,8 @@ QW.Window {
         Item {
             id: palcoCartas
             visible: !palco.recolhida
+            opacity: palco.aberta || palco.pedeAtencao || espiada.running ? 1 : palco.opacidadeRepouso
+            Behavior on opacity { NumberAnimation { duration: palco.duracao } }
             x: palco.margem
             y: palco.margem
             width: palco.larguraCartao
