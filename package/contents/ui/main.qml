@@ -18,6 +18,7 @@ QW.Window {
     readonly property int passoPilha: 16      // deslocamento entre cartas na pilha
     readonly property int maxNaPilha: 4       // cartas visíveis na pilha
     readonly property int larguraRecolhida: 10
+    readonly property int invasaoMinima: 60   // px de janela sobre a pilha para recolher
     readonly property int duracao: 200
     // Kirigami.Theme não segue o tema dentro do KWin; cor fixa.
     readonly property color corDestaque: "#4a90d9"
@@ -123,8 +124,9 @@ QW.Window {
                 lista.push(w);
             } else {
                 const g = w.frameGeometry;
-                if (g.x < faixa.x + faixa.width && g.x + g.width > faixa.x
-                        && g.y < faixa.y + faixa.height && g.y + g.height > faixa.y)
+                const dx = Math.min(g.x + g.width, faixa.x + faixa.width) - Math.max(g.x, faixa.x);
+                const dy = Math.min(g.y + g.height, faixa.y + faixa.height) - Math.max(g.y, faixa.y);
+                if (dx >= invasaoMinima && dy >= invasaoMinima)
                     cobre = true;
             }
         }
