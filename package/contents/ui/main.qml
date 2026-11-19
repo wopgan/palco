@@ -12,7 +12,7 @@ PlasmaCore.Window {
     // ---- ajustes ----
     readonly property int larguraMiniatura: 170
     readonly property int margem: 14
-    readonly property int larguraRecolhida: 6
+    readonly property int larguraRecolhida: 10
     // -----------------
 
     property var minimizadas: []
@@ -21,7 +21,11 @@ PlasmaCore.Window {
     readonly property bool recolhida: sobreposta && !mouseDentro
     readonly property var area: Workspace.clientArea(KWin.PlacementArea, Workspace.activeScreen, Workspace.currentDesktop)
 
-    flags: Qt.X11BypassWindowManagerHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+    // No Wayland o bypass não basta: o KWin gerencia a janela. Por isso o
+    // título fixo, para achá-la e marcá-la como "sempre acima" e fora das listas.
+    readonly property string tituloProprio: "org.sylvio.palco"
+    title: tituloProprio
+    flags: Qt.X11BypassWindowManagerHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowStaysOnTopHint
     color: "transparent"
     visible: minimizadas.length > 0
 
@@ -48,7 +52,15 @@ PlasmaCore.Window {
     }
 
     function relevante(w) {
-        return w && w.normalWindow && !w.skipTaskbar && !w.deleted;
+        return w && w.normalWindow && !w.skipTaskbar && !w.deleted && w.caption !== tituloProprio;
+    }
+
+    function ajustarPropria(w) {
+        if (!w.keepAbove) w.keepAbove = true;
+        if (!w.skipTaskbar) w.skipTaskbar = true;
+        if (!w.skipSwitcher) w.skipSwitcher = true;
+        if (!w.skipPager) w.skipPager = true;
+        if (!w.onAllDesktops) w.onAllDesktops = true;
     }
 
     function atualizar() {
@@ -58,6 +70,10 @@ PlasmaCore.Window {
         const ordem = Workspace.stackingOrder;
         for (let i = ordem.length - 1; i >= 0; i--) {
             const w = ordem[i];
+            if (w && w.caption === tituloProprio) {
+                ajustarPropria(w);
+                continue;
+            }
             if (!relevante(w) || !naAreaAtual(w))
                 continue;
             if (w.minimized) {
