@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Authors": [{ "Name": "Sylvio" }],
+        "Description": "Miniaturas das janelas minimizadas na lateral esquerda (estilo Stage Manager)",
+        "Icon": "window-minimize",
+        "Id": "org.sylvio.palco",
+        "License": "GPL",
+        "Name": "Palco",
+        "Version": "0.1"
+    },
+    "X-Plasma-API": "declarativescript",
+    "X-Plasma-MainScript": "ui/main.qml"
+}
