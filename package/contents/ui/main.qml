@@ -22,12 +22,14 @@ QW.Window {
     readonly property int duracao: 200
     // Kirigami.Theme não segue o tema dentro do KWin; cor fixa.
     readonly property color corDestaque: "#4a90d9"
+    readonly property color corAtencao: "#f0a030"
     // -----------------
 
     property var minimizadas: []
     property bool sobreposta: false
     readonly property bool aberta: hover.hovered || segurarAberta.running
     readonly property bool recolhida: sobreposta && !aberta
+    readonly property bool pedeAtencao: minimizadas.some(w => w.demandsAttention)
     readonly property var area: Workspace.clientArea(KWin.PlacementArea, Workspace.activeScreen, Workspace.currentDesktop)
 
     readonly property int alturaCartao: alturaMiniatura + (aberta ? 22 : 0)
@@ -130,6 +132,10 @@ QW.Window {
                     cobre = true;
             }
         }
+        // quem pede atenção vai para o topo da pilha
+        const urgentes = lista.filter(w => w.demandsAttention);
+        if (urgentes.length > 0 && urgentes.length < lista.length)
+            lista.splice(0, lista.length, ...urgentes, ...lista.filter(w => !w.demandsAttention));
         if (lista.length !== minimizadas.length || lista.some((w, i) => w !== minimizadas[i]))
             minimizadas = lista;
         sobreposta = cobre;
@@ -161,6 +167,7 @@ QW.Window {
 
         // alça quando recolhida
         Rectangle {
+            id: alca
             visible: palco.recolhida
             anchors.left: parent.left
             anchors.leftMargin: 2
@@ -168,8 +175,15 @@ QW.Window {
             width: 5
             height: parent.height * 0.8
             radius: 3
-            color: palco.corDestaque
+            color: palco.pedeAtencao ? palco.corAtencao : palco.corDestaque
             opacity: 0.85
+            SequentialAnimation on opacity {
+                running: palco.pedeAtencao && palco.recolhida
+                loops: Animation.Infinite
+                onRunningChanged: if (!running) alca.opacity = 0.85
+                NumberAnimation { to: 0.25; duration: 500; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 1.0; duration: 500; easing.type: Easing.InOutSine }
+            }
         }
 
         Item {
@@ -190,6 +204,7 @@ QW.Window {
                     readonly property var janela: modelData
                     readonly property real esc: palco.escalaLeque
                     readonly property int profundidade: Math.min(index, palco.maxNaPilha - 1)
+                    readonly property bool atencao: janela.demandsAttention
 
                     width: palco.larguraCartao
                     height: palco.alturaMiniatura + 22
@@ -209,16 +224,32 @@ QW.Window {
                     Behavior on scale { NumberAnimation { duration: palco.duracao; easing.type: Easing.OutCubic } }
                     Behavior on opacity { NumberAnimation { duration: palco.duracao } }
 
+                    // tremida periódica enquanto a janela pede atenção
+                    transform: Translate { id: tremor }
+                    SequentialAnimation {
+                        running: cartao.atencao && !palco.recolhida
+                        loops: Animation.Infinite
+                        onRunningChanged: if (!running) tremor.x = 0
+                        NumberAnimation { target: tremor; property: "x"; to: -6; duration: 50 }
+                        NumberAnimation { target: tremor; property: "x"; to: 6; duration: 70 }
+                        NumberAnimation { target: tremor; property: "x"; to: -4; duration: 70 }
+                        NumberAnimation { target: tremor; property: "x"; to: 4; duration: 70 }
+                        NumberAnimation { target: tremor; property: "x"; to: 0; duration: 50 }
+                        PauseAnimation { duration: 1700 }
+                    }
+
                     Rectangle {
                         id: moldura
                         width: parent.width
                         height: palco.alturaMiniatura
                         radius: 8
                         color: Qt.rgba(0.08, 0.09, 0.11, 0.55)
-                        border.width: toque.containsMouse ? 2 : 1
-                        border.color: toque.containsMouse
-                            ? palco.corDestaque
-                            : Qt.rgba(1, 1, 1, 0.12)
+                        border.width: cartao.atencao || toque.containsMouse ? 2 : 1
+                        border.color: cartao.atencao
+                            ? palco.corAtencao
+                            : toque.containsMouse
+                                ? palco.corDestaque
+                                : Qt.rgba(1, 1, 1, 0.12)
 
                         WindowThumbnail {
                             anchors.fill: parent
