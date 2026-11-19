@@ -17,6 +17,7 @@ QW.Window {
     readonly property int espacoLeque: 14
     readonly property int passoPilha: 30      // deslocamento entre cartas na pilha
     readonly property int maxNaPilha: 4       // cartas visíveis na pilha
+    readonly property int maxCartas: 40       // cartões fixos (nunca recriados)
     readonly property int larguraRecolhida: 10
     readonly property int invasaoMinima: 60   // px de janela sobre a pilha para recolher
     readonly property int duracao: 200
@@ -28,6 +29,7 @@ QW.Window {
     // -----------------
 
     property var minimizadas: []
+    property var cartaoSobMouse: null
     // contador "(n)" do título por janela (WhatsApp Web, Gmail...): sites
     // não pedem atenção ao KWin, então o aumento do contador conta como pedido.
     property var contadores: ({})
@@ -63,12 +65,14 @@ QW.Window {
     title: tituloProprio
     flags: Qt.X11BypassWindowManagerHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowStaysOnTopHint
     color: "transparent"
-    visible: n > 0
+    // Sempre visível (1 px sem minimizadas): esconder/mostrar a janela com o
+    // mouse por perto é uma das suspeitas dos crashes do KWin de 19/11.
+    visible: true
 
     // A janela só ocupa o tamanho do conteúdo (o KWin não aceita máscara),
     // para não roubar cliques das janelas de baixo.
-    readonly property int larguraAlvo: recolhida ? larguraRecolhida : larguraCartao + margem * 2
-    readonly property int alturaAlvo: recolhida ? Math.min(area ? area.height : 0, 200) : alturaConteudo + margem * 2
+    readonly property int larguraAlvo: n === 0 ? 1 : recolhida ? larguraRecolhida : larguraCartao + margem * 2
+    readonly property int alturaAlvo: n === 0 ? 1 : recolhida ? Math.min(area ? area.height : 0, 200) : alturaConteudo + margem * 2
     onLarguraAlvoChanged: posicionar()
     onAlturaAlvoChanged: atrasoEncolher.restart()
     onAreaChanged: posicionar()
@@ -98,7 +102,7 @@ QW.Window {
     function posicionar() {
         if (!area)
             return;
-        const h = Math.min(alturaAlvo, area.height);
+        const h = Math.max(1, Math.min(alturaAlvo, area.height));
         setGeometry(area.x, area.y + Math.round((area.height - h) / 2), larguraAlvo, h);
     }
 
@@ -165,7 +169,10 @@ QW.Window {
         if (urgentes.length > 0 && urgentes.length < lista.length)
             lista.splice(0, lista.length, ...urgentes, ...lista.filter(w => !w.demandsAttention));
         if (lista.length !== minimizadas.length || lista.some((w, i) => w !== minimizadas[i]))
+        {
+            cartaoSobMouse = null;  // o cartão sob o mouse pode ter mudado de janela
             minimizadas = lista;
+        }
         sobreposta = cobre;
     }
 
@@ -229,16 +236,20 @@ QW.Window {
             height: palco.alturaConteudo
 
             Repeater {
-                model: palco.minimizadas
+                id: cartoes
+                // Modelo numérico fixo: os cartões nunca são apagados nem
+                // recriados, só trocam de janela ou se escondem.
+                model: palco.maxCartas
 
                 delegate: Item {
                     id: cartao
-                    required property var modelData
                     required property int index
-                    readonly property var janela: modelData
+                    readonly property var janela: index < palco.n ? palco.minimizadas[index] : null
+                    visible: janela !== null
                     readonly property real esc: palco.escalaLeque
                     readonly property int profundidade: Math.min(index, palco.maxNaPilha - 1)
-                    readonly property bool atencao: janela.demandsAttention
+                    readonly property bool atencao: janela !== null && janela.demandsAttention
+                    readonly property bool sobMouse: palco.cartaoSobMouse === cartao
 
                     width: palco.larguraCartao
                     height: palco.alturaMiniatura + 22
@@ -250,7 +261,7 @@ QW.Window {
                         ? index * (palco.alturaMiniatura + 22 + palco.espacoLeque) * esc
                         : profundidade * palco.passoPilha
                     scale: palco.aberta
-                        ? esc * (toque.containsMouse ? 1.05 : 1.0)
+                        ? esc * (cartao.sobMouse ? 1.05 : 1.0)
                         : 1.0 - profundidade * 0.05
                     opacity: palco.aberta || index < palco.maxNaPilha ? 1 : 0
 
@@ -258,8 +269,8 @@ QW.Window {
                     Behavior on scale { NumberAnimation { duration: palco.duracao; easing.type: Easing.OutCubic } }
                     Behavior on opacity { NumberAnimation { duration: palco.duracao } }
 
-                    // tremida periódica enquanto a janela pede atenção
-                    transform: Translate { id: tremor }
+                    // tremida periódica enquanto a janela pede atenção; desloca
+                    // o x de um Item interno (transform foi suspeita de crash)
                     SequentialAnimation {
                         running: cartao.atencao && !palco.recolhida
                         loops: Animation.Infinite
@@ -272,16 +283,21 @@ QW.Window {
                         PauseAnimation { duration: 1700 }
                     }
 
+                    Item {
+                    id: tremor
+                    width: parent.width
+                    height: parent.height
+
                     Rectangle {
                         id: moldura
                         width: parent.width
                         height: palco.alturaMiniatura
                         radius: 8
                         color: Qt.rgba(0.08, 0.09, 0.11, 0.55)
-                        border.width: cartao.atencao || toque.containsMouse ? 2 : 1
+                        border.width: cartao.atencao || cartao.sobMouse ? 2 : 1
                         border.color: cartao.atencao
                             ? palco.corAtencao
-                            : toque.containsMouse
+                            : cartao.sobMouse
                                 ? palco.corDestaque
                                 : Qt.rgba(1, 1, 1, 0.12)
 
@@ -289,11 +305,12 @@ QW.Window {
                             anchors.fill: parent
                             anchors.margins: 5
                             client: cartao.janela
+                            visible: cartao.janela !== null
                         }
                     }
 
                     Kirigami.Icon {
-                        source: cartao.janela.icon
+                        source: cartao.janela ? cartao.janela.icon : ""
                         width: 26
                         height: 26
                         anchors.right: moldura.right
@@ -305,7 +322,7 @@ QW.Window {
                         anchors.top: moldura.bottom
                         anchors.topMargin: 5
                         width: parent.width
-                        text: cartao.janela.caption
+                        text: cartao.janela ? cartao.janela.caption : ""
                         elide: Text.ElideRight
                         horizontalAlignment: Text.AlignHCenter
                         font.pointSize: 8
@@ -315,20 +332,43 @@ QW.Window {
                         opacity: palco.aberta ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: palco.duracao } }
                     }
-
-                    MouseArea {
-                        id: toque
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        enabled: palco.aberta
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        onClicked: (ev) => {
-                            if (ev.button === Qt.MiddleButton)
-                                cartao.janela.closeWindow();
-                            else
-                                palco.restaurar(cartao.janela);
-                        }
                     }
+                }
+            }
+
+            // Uma só área de mouse, fixa, para o palco inteiro (cartões sem
+            // hover próprio), por causa dos crashes do KWin de 19/11/2026.
+            MouseArea {
+                id: toqueGeral
+                anchors.fill: parent
+                z: 10000
+                hoverEnabled: true
+                enabled: palco.aberta
+                acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                // cartão de cima primeiro (índice menor = z maior)
+                function cartaoEm(x, y) {
+                    for (let i = 0; i < palco.n; i++) {
+                        const c = cartoes.itemAt(i);
+                        if (!c || !c.visible || !c.janela)
+                            continue;
+                        const p = toqueGeral.mapToItem(c, x, y);
+                        if (c.contains(p))
+                            return c;
+                    }
+                    return null;
+                }
+                onPositionChanged: (ev) => palco.cartaoSobMouse = cartaoEm(ev.x, ev.y)
+                onExited: palco.cartaoSobMouse = null
+                onEnabledChanged: if (!enabled) palco.cartaoSobMouse = null
+                onClicked: (ev) => {
+                    const c = cartaoEm(ev.x, ev.y);
+                    palco.cartaoSobMouse = null;
+                    if (!c || !c.janela)
+                        return;
+                    if (ev.button === Qt.MiddleButton)
+                        c.janela.closeWindow();
+                    else
+                        palco.restaurar(c.janela);
                 }
             }
         }
