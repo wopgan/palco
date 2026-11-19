@@ -26,6 +26,9 @@ QW.Window {
     // -----------------
 
     property var minimizadas: []
+    // contador "(n)" do título por janela (WhatsApp Web, Gmail...): sites
+    // não pedem atenção ao KWin, então o aumento do contador conta como pedido.
+    property var contadores: ({})
     property bool sobreposta: false
     readonly property bool aberta: hover.hovered || segurarAberta.running
     readonly property bool recolhida: sobreposta && !aberta
@@ -107,6 +110,16 @@ QW.Window {
         if (!w.onAllDesktops) w.onAllDesktops = true;
     }
 
+    function verificarContador(w) {
+        const m = /^\((\d+)\)/.exec(w.caption || "");
+        const atual = m ? parseInt(m[1]) : 0;
+        const id = String(w.internalId);
+        const antes = contadores[id];
+        contadores[id] = atual;
+        if (w.minimized && antes !== undefined && atual > antes && !w.demandsAttention)
+            w.demandsAttention = true;
+    }
+
     function atualizar() {
         const lista = [];
         let cobre = false;
@@ -122,6 +135,7 @@ QW.Window {
             }
             if (!relevante(w) || !naAreaAtual(w))
                 continue;
+            verificarContador(w);
             if (w.minimized) {
                 lista.push(w);
             } else {
@@ -156,7 +170,10 @@ QW.Window {
     Connections {
         target: Workspace
         function onWindowAdded() { palco.atualizar(); }
-        function onWindowRemoved() { palco.atualizar(); }
+        function onWindowRemoved(w) {
+            if (w) delete palco.contadores[String(w.internalId)];
+            palco.atualizar();
+        }
         function onCurrentDesktopChanged() { palco.atualizar(); }
         function onWindowActivated() { palco.atualizar(); }
     }
