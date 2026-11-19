@@ -15,7 +15,7 @@ QW.Window {
     readonly property int alturaMiniatura: 110
     readonly property int margem: 18
     readonly property int espacoLeque: 14
-    readonly property int passoPilha: 16      // deslocamento entre cartas na pilha
+    readonly property int passoPilha: 30      // deslocamento entre cartas na pilha
     readonly property int maxNaPilha: 4       // cartas visíveis na pilha
     readonly property int larguraRecolhida: 10
     readonly property int invasaoMinima: 60   // px de janela sobre a pilha para recolher
