@@ -1,7 +1,8 @@
 # Palco
 
 Script do KWin (Plasma 6, Wayland) estilo Stage Manager: miniaturas das janelas
-minimizadas da área de trabalho atual numa faixa à esquerda.
+minimizadas da área de trabalho atual empilhadas na borda esquerda, sem fundo;
+mouse em cima abre o leque.
 
 - Clique: restaura e foca. Botão do meio: fecha.
 - Se alguma janela cobre a faixa, ela recolhe numa alça fina; passe o mouse para abrir.
