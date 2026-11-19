@@ -195,17 +195,18 @@ QW.Window {
         anchors.fill: parent
         HoverHandler { id: hover }
 
-        // alça quando recolhida
+        // alça quando recolhida: só aparece com pedido de atenção;
+        // sem ele a faixa fica invisível mas ainda abre o palco no hover
         Rectangle {
             id: alca
-            visible: palco.recolhida
+            visible: palco.recolhida && palco.pedeAtencao
             anchors.left: parent.left
             anchors.leftMargin: 2
             anchors.verticalCenter: parent.verticalCenter
             width: 5
             height: parent.height * 0.8
             radius: 3
-            color: palco.pedeAtencao ? palco.corAtencao : palco.corDestaque
+            color: palco.corAtencao
             opacity: 0.85
             SequentialAnimation on opacity {
                 running: palco.pedeAtencao && palco.recolhida
