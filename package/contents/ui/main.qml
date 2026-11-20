@@ -27,6 +27,7 @@ QW.Window {
     // Kirigami.Theme não segue o tema dentro do KWin; cor fixa.
     readonly property color corDestaque: "#4a90d9"
     readonly property color corAtencao: "#f0a030"
+    readonly property color corCena: "#4caf7a"
     // Modo palco (como o Stage Manager): ativar uma janela manda as outras
     // da área atual para a pilha. Liga com:
     //   kwriteconfig6 --file kwinrc --group Script-org.sylvio.palco --key ModoPalco true
@@ -37,6 +38,16 @@ QW.Window {
     // por cartão (mesmo índice de minimizadas): grupo (app), posição no
     // grupo, tamanho do grupo e y no leque
     property var infoCartas: []
+    property string assinaturaGrupos: ""
+    // Cenas montadas na mão (Shift+clique ou arrastar um cartão para fora):
+    // internalId -> número da cena. Só em memória; somem ao sair da sessão.
+    property var cenaDe: ({})
+    property int proximaCena: 1
+    // janelas que o próprio Palco minimizou na troca de cena (continuam na
+    // cena); minimizar na mão tira a janela da cena
+    property var minimizadasPeloPalco: ({})
+    property var cartaoArrastado: null
+    property bool arrastandoFora: false
     property int nGrupos: 0
     property var cartaoSobMouse: null
     // contador "(n)" do título por janela (WhatsApp Web, Gmail...): sites
@@ -46,7 +57,7 @@ QW.Window {
     // menu em tela cheia do Plasma (painel de aplicativos) aberto: o Palco
     // some (fica com 1 px) para não ficar por cima do menu.
     property bool menuAberto: false
-    readonly property bool aberta: hover.hovered || segurarAberta.running
+    readonly property bool aberta: hover.hovered || segurarAberta.running || cartaoArrastado !== null
     readonly property bool recolhida: sobreposta && !aberta && !espiada.running
     readonly property int nAtencao: minimizadas.filter(w => w.demandsAttention).length
     readonly property bool pedeAtencao: nAtencao > 0
@@ -174,6 +185,7 @@ QW.Window {
         const faixaH = alturaPilha + margem * 2;
         const faixa = Qt.rect(area.x, area.y + (area.height - faixaH) / 2, larguraCartao + margem * 2, faixaH);
         const ordem = Workspace.stackingOrder;
+        limparCenas(ordem.filter(w => relevante(w)));
         for (let i = ordem.length - 1; i >= 0; i--) {
             const w = ordem[i];
             if (w && w.caption === tituloProprio) {
@@ -214,15 +226,17 @@ QW.Window {
             grupos[porChave[k]].push(w);
         }
         const ordenada = [].concat(...grupos);
-        if (ordenada.length !== minimizadas.length || ordenada.some((w, i) => w !== minimizadas[i]))
+        const assinatura = ordenada.map(w => chaveGrupo(w)).join("|");
+        if (assinatura !== assinaturaGrupos || ordenada.length !== minimizadas.length || ordenada.some((w, i) => w !== minimizadas[i]))
         {
+            assinaturaGrupos = assinatura;
             cartaoSobMouse = null;  // o cartão sob o mouse pode ter mudado de janela
             const info = [];
             let y = 0;
             grupos.forEach((g, gi) => g.forEach((w, pi) => {
                 if (info.length > 0)
                     y += pi === 0 ? espacoLeque : espacoGrupo;
-                info.push({ grupo: gi, pos: pi, tam: g.length, yLeque: y });
+                info.push({ grupo: gi, pos: pi, tam: g.length, yLeque: y, cena: chaveGrupo(w).startsWith("cena:") });
                 y += alturaMiniatura + 22;
             }));
             infoCartas = info;
@@ -244,14 +258,66 @@ QW.Window {
             const w = ordem[i];
             if (w === ativa || !relevante(w) || w.minimized || !w.minimizable || w.transient || w.keepAbove)
                 continue;
-            if (w.resourceClass === ativa.resourceClass || !naAreaAtual(w))
+            if (chaveGrupo(w) === chaveGrupo(ativa) || !naAreaAtual(w))
                 continue;
+            minimizadasPeloPalco[String(w.internalId)] = true;
             w.minimized = true;
         }
     }
 
     function chaveGrupo(w) {
+        const c = cenaDe[String(w.internalId)];
+        if (c !== undefined)
+            return "cena:" + c;
         return w.resourceClass || ("id:" + w.internalId);
+    }
+
+    // Junta o grupo do cartão à cena atual (a janela ativa e as que estão
+    // com ela). Se a cena ainda não existe, nasce agora.
+    function juntarNaCena(w) {
+        const ativa = Workspace.activeWindow;
+        if (!relevante(ativa) || ativa.minimized || !naAreaAtual(ativa)) {
+            restaurar(w);
+            return;
+        }
+        const kAtiva = chaveGrupo(ativa);
+        const kNova = chaveGrupo(w);
+        let c = cenaDe[String(ativa.internalId)];
+        if (c === undefined)
+            c = proximaCena++;
+        const ordem = Workspace.stackingOrder;
+        for (let i = 0; i < ordem.length; i++) {
+            const o = ordem[i];
+            if (!relevante(o) || !naAreaAtual(o))
+                continue;
+            const k = chaveGrupo(o);
+            if ((k === kAtiva && !o.minimized) || (k === kNova && o.minimized))
+                cenaDe[String(o.internalId)] = c;
+        }
+        restaurar(w);
+    }
+
+    // Tira da cena quem foi minimizado na mão e desfaz cenas com 1 janela.
+    function limparCenas(janelas) {
+        const membros = {};
+        for (const w of janelas) {
+            const id = String(w.internalId);
+            if (!w.minimized)
+                delete minimizadasPeloPalco[id];
+            const c = cenaDe[id];
+            if (c === undefined)
+                continue;
+            if (w.minimized && !minimizadasPeloPalco[id]) {
+                delete cenaDe[id];
+                continue;
+            }
+            (membros[c] = membros[c] || []).push(id);
+        }
+        for (const id in cenaDe) {
+            const m = membros[cenaDe[id]];
+            if (!m || m.length < 2)
+                delete cenaDe[id];
+        }
     }
 
     // Traz o grupo (app) inteiro de volta; a janela clicada fica por cima.
@@ -275,7 +341,12 @@ QW.Window {
         target: Workspace
         function onWindowAdded() { palco.atualizar(); }
         function onWindowRemoved(w) {
-            if (w) delete palco.contadores[String(w.internalId)];
+            if (w) {
+                const id = String(w.internalId);
+                delete palco.contadores[id];
+                delete palco.cenaDe[id];
+                delete palco.minimizadasPeloPalco[id];
+            }
             palco.atualizar();
         }
         function onCurrentDesktopChanged() { palco.atualizar(); }
@@ -337,6 +408,8 @@ QW.Window {
                     readonly property int grupo: info ? info.grupo : 0
                     readonly property bool cabeca: !info || info.pos === 0
                     readonly property int tamGrupo: info ? info.tam : 1
+                    readonly property bool emCena: info !== null && info.cena
+                    readonly property bool arrastado: palco.cartaoArrastado === cartao
                     readonly property int profundidade: Math.min(grupo, palco.maxNaPilha - 1)
                     readonly property bool atencao: janela !== null && janela.demandsAttention
                     readonly property bool sobMouse: palco.cartaoSobMouse === cartao
@@ -385,10 +458,12 @@ QW.Window {
                         height: palco.alturaMiniatura
                         radius: 8
                         color: Qt.rgba(0.08, 0.09, 0.11, 0.55)
-                        border.width: cartao.atencao || cartao.sobMouse ? 2 : 1
+                        border.width: cartao.atencao || cartao.sobMouse || cartao.arrastado ? 2 : 1
                         border.color: cartao.atencao
                             ? palco.corAtencao
-                            : cartao.sobMouse
+                            : cartao.arrastado && palco.arrastandoFora
+                                ? palco.corCena
+                                : cartao.sobMouse
                                 ? palco.corDestaque
                                 : Qt.rgba(1, 1, 1, 0.12)
 
@@ -420,7 +495,7 @@ QW.Window {
                         width: Math.max(20, contagem.implicitWidth + 10)
                         height: 20
                         radius: 10
-                        color: palco.corDestaque
+                        color: cartao.emCena ? palco.corCena : palco.corDestaque
                         Text {
                             id: contagem
                             anchors.centerIn: parent
@@ -435,7 +510,9 @@ QW.Window {
                         anchors.top: moldura.bottom
                         anchors.topMargin: 5
                         width: parent.width
-                        text: cartao.janela ? cartao.janela.caption : ""
+                        text: cartao.arrastado && palco.arrastandoFora
+                            ? "solte para juntar à cena"
+                            : cartao.janela ? cartao.janela.caption : ""
                         elide: Text.ElideRight
                         horizontalAlignment: Text.AlignHCenter
                         font.pointSize: 8
@@ -470,9 +547,33 @@ QW.Window {
                     }
                     return null;
                 }
-                onPositionChanged: (ev) => palco.cartaoSobMouse = cartaoEm(ev.x, ev.y)
                 onExited: palco.cartaoSobMouse = null
                 onEnabledChanged: if (!enabled) palco.cartaoSobMouse = null
+                // arrastar um cartão para fora do palco junta à cena atual
+                onPressed: (ev) => {
+                    if (ev.button === Qt.LeftButton)
+                        palco.cartaoArrastado = cartaoEm(ev.x, ev.y);
+                }
+                onPositionChanged: (ev) => {
+                    if (palco.cartaoArrastado)
+                        palco.arrastandoFora = ev.x > width + palco.margem;
+                    else
+                        palco.cartaoSobMouse = cartaoEm(ev.x, ev.y);
+                }
+                onReleased: (ev) => {
+                    const c = palco.cartaoArrastado;
+                    const fora = palco.arrastandoFora;
+                    palco.cartaoArrastado = null;
+                    palco.arrastandoFora = false;
+                    if (fora && c && c.janela) {
+                        palco.cartaoSobMouse = null;
+                        palco.juntarNaCena(c.janela);
+                    }
+                }
+                onCanceled: {
+                    palco.cartaoArrastado = null;
+                    palco.arrastandoFora = false;
+                }
                 onClicked: (ev) => {
                     const c = cartaoEm(ev.x, ev.y);
                     palco.cartaoSobMouse = null;
@@ -480,6 +581,8 @@ QW.Window {
                         return;
                     if (ev.button === Qt.MiddleButton)
                         c.janela.closeWindow();
+                    else if (ev.modifiers & Qt.ShiftModifier)
+                        palco.juntarNaCena(c.janela);
                     else
                         palco.restaurar(c.janela);
                 }
