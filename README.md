@@ -5,7 +5,30 @@ da área de trabalho atual viram miniaturas ao vivo empilhadas na borda esquerda
 A ideia é aposentar o gerenciador de tarefas do painel: troca de janela pelo
 Alt+Tab, e o que está minimizado fica à vista no palco.
 
-![Palco em repouso](screenshots/pilha.png)
+<table>
+<tr>
+<td align="center"><img src="screenshots/repouso.png" width="200" alt="Palco em repouso"><br><sub>Repouso: cena (selo verde), grupo do mesmo app (azul) e janela solta</sub></td>
+<td align="center"><img src="screenshots/leque.png" width="200" alt="Leque aberto"><br><sub>Mouse em cima: o leque mostra todas as janelas</sub></td>
+<td align="center"><img src="screenshots/arrastar.png" width="200" alt="Arrastando um cartão para a cena"><br><sub>Arrastando um cartão para juntar à cena</sub></td>
+<td align="center"><img src="screenshots/atencao.png" width="200" alt="Pedido de atenção"><br><sub>Pedido de atenção: borda laranja, sobe para o topo</sub></td>
+</tr>
+</table>
+
+## Como usar
+
+Com o modo palco ligado (veja em [Instalar](#instalar)):
+
+1. **Trabalhe normalmente.** A janela que você ativa (clique, Alt+Tab ou abrindo um
+   app) fica em cena; as outras vão para a coluna da esquerda.
+2. **Troque de cena** passando o mouse na coluna e clicando num cartão. A janela (ou
+   o grupo inteiro) volta, e a cena atual vai para a coluna.
+3. **Monte uma cena** com apps diferentes: com uma janela em cena, dê **Shift+clique**
+   num cartão, ou **arraste-o para a direita** até aparecer "solte para juntar à
+   cena". Daí em diante eles vão e voltam juntos.
+4. **Desfaça** minimizando uma janela da cena: ela sai do grupo.
+5. **Feche** uma janela minimizada com o **botão do meio** no cartão.
+
+Sem o modo palco, o Palco só mostra o que você minimiza na mão.
 
 ## O que faz
 
@@ -30,8 +53,6 @@ Alt+Tab, e o que está minimizado fica à vista no palco.
   vai e volta da pilha inteira, num monte com selo verde. Minimizar uma janela na
   mão tira ela da cena. As cenas ficam só em memória e somem ao sair da sessão.
 
-![Leque aberto](screenshots/leque.png)
-![Pedido de atenção](screenshots/atencao.png)
 
 ## Instalar
 
