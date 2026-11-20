@@ -42,7 +42,8 @@ Sem o modo palco, o Palco só mostra o que você minimiza na mão.
   laranja piscando até você abrir a janela.
 - **Sites também avisam**: quando o contador `(n)` no título de uma janela
   minimizada aumenta (WhatsApp Web, Gmail, Discord...), conta como pedido de atenção.
-- **Some com o menu em tela cheia** (painel de aplicativos do Plasma) aberto.
+- **Some com qualquer menu** aberto sobre a coluna: Kickoff, Kicker, painel de
+  aplicativos em tela cheia, popups do painel, KRunner e menus dos apps.
 - **Agrupa por app**: na pilha, as janelas do mesmo app viram um cartão só, com um
   selo com a quantidade; no leque aparecem todas, e o clique traz o app inteiro.
 - **Modo palco** (opcional): ativar uma janela manda as outras da área atual para

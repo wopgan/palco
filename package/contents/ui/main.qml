@@ -65,7 +65,7 @@ QW.Window {
     // não pedem atenção ao KWin, então o aumento do contador conta como pedido.
     property var contadores: ({})
     property bool sobreposta: false
-    // menu em tela cheia do Plasma (painel de aplicativos) aberto: o Palco
+    // menu do Plasma aberto (tela cheia ou popup sobre a coluna): o Palco
     // some (fica com 1 px) para não ficar por cima do menu.
     property bool menuAberto: false
     // Mouse em cima vem da posição do cursor no KWin, não do hover do Qt:
@@ -181,19 +181,34 @@ QW.Window {
         if (!w.onAllDesktops) w.onAllDesktops = true;
     }
 
-    // Painel de aplicativos (kickerdash) e afins: janela do plasmashell,
-    // que não é painel nem fundo, cobrindo quase a tela toda.
-    function ehMenuTelaCheia(w) {
+    // Menus: qualquer janela do Plasma (Kickoff, Kicker, painel de
+    // aplicativos, popups dos applets, KRunner) ou menu de qualquer app,
+    // em tela cheia ou caindo sobre a coluna. Painel, fundo, dicas e
+    // notificações ficam de fora.
+    function ehMenu(w) {
         if (!w || w.minimized || w.deleted || w.dock || w.desktopWindow)
             return false;
-        const classe = (w.resourceClass || "") + " " + (w.desktopFileName || "");
-        if (classe.indexOf("plasmashell") < 0)
+        // avisos e dicas não contam (passam rápido e não ficam sob o Palco)
+        if (w.tooltip || w.notification || w.criticalNotification || w.onScreenDisplay)
+            return false;
+        const classe = ((w.resourceClass || "") + " " + (w.desktopFileName || "")).toLowerCase();
+        const doPlasma = classe.indexOf("plasmashell") >= 0 || classe.indexOf("krunner") >= 0;
+        const tipoMenu = w.popupMenu || w.dropdownMenu || w.menu || w.comboBox || w.appletPopup;
+        if (!doPlasma && !tipoMenu)
             return false;
         if (w.output && Workspace.activeScreen && w.output.name !== Workspace.activeScreen.name)
             return false;
         const g = w.frameGeometry;
         const t = w.output ? w.output.geometry : area;
-        return g.width * g.height >= t.width * t.height * 0.9;
+        if (g.width * g.height >= t.width * t.height * 0.9)
+            return true;
+        // menu que desce do painel (Kickoff) e outros popups do Plasma:
+        // só se cair na faixa da coluna (faixa fixa, não a janela do
+        // Palco, que encolhe ao esconder e faria o teste oscilar)
+        if (!area || g.width < 2 || g.height < 2)
+            return false;
+        const fx = area.x + larguraCartao + margem * 2;
+        return g.x < fx && g.x + g.width > area.x && g.y < area.y + area.height && g.y + g.height > area.y;
     }
 
     function verificarContador(w) {
@@ -222,7 +237,7 @@ QW.Window {
                 ajustarPropria(w);
                 continue;
             }
-            if (ehMenuTelaCheia(w)) {
+            if (ehMenu(w)) {
                 menu = true;
                 continue;
             }
