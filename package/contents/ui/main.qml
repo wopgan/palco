@@ -15,6 +15,7 @@ QW.Window {
     readonly property int alturaMiniatura: 110
     readonly property int margem: 18
     readonly property int espacoLeque: 14
+    readonly property int espacoGrupo: 4      // entre janelas do mesmo app no leque
     readonly property int passoPilha: 30      // deslocamento entre cartas na pilha
     readonly property int maxNaPilha: 4       // cartas visíveis na pilha
     readonly property int maxCartas: 40       // cartões fixos (nunca recriados)
@@ -33,6 +34,10 @@ QW.Window {
     // -----------------
 
     property var minimizadas: []
+    // por cartão (mesmo índice de minimizadas): grupo (app), posição no
+    // grupo, tamanho do grupo e y no leque
+    property var infoCartas: []
+    property int nGrupos: 0
     property var cartaoSobMouse: null
     // contador "(n)" do título por janela (WhatsApp Web, Gmail...): sites
     // não pedem atenção ao KWin, então o aumento do contador conta como pedido.
@@ -60,8 +65,8 @@ QW.Window {
 
     readonly property int alturaCartao: alturaMiniatura + (aberta ? 22 : 0)
     readonly property int n: minimizadas.length
-    readonly property int alturaPilha: alturaMiniatura + Math.max(0, Math.min(n, maxNaPilha) - 1) * passoPilha
-    readonly property int alturaLequeBruta: n * (alturaMiniatura + 22) + Math.max(0, n - 1) * espacoLeque
+    readonly property int alturaPilha: alturaMiniatura + Math.max(0, Math.min(nGrupos, maxNaPilha) - 1) * passoPilha
+    readonly property int alturaLequeBruta: n * (alturaMiniatura + 22) + Math.max(0, nGrupos - 1) * espacoLeque + Math.max(0, n - nGrupos) * espacoGrupo
     // se não couber na tela, as cartas do leque encolhem
     readonly property real escalaLeque: area ? Math.min(1, (area.height - margem * 2) / Math.max(1, alturaLequeBruta)) : 1
     readonly property int alturaConteudo: aberta ? Math.ceil(alturaLequeBruta * escalaLeque) : alturaPilha
@@ -196,10 +201,33 @@ QW.Window {
         const urgentes = lista.filter(w => w.demandsAttention);
         if (urgentes.length > 0 && urgentes.length < lista.length)
             lista.splice(0, lista.length, ...urgentes, ...lista.filter(w => !w.demandsAttention));
-        if (lista.length !== minimizadas.length || lista.some((w, i) => w !== minimizadas[i]))
+        // agrupa por app, na ordem em que cada app aparece (o mais recente
+        // ou com pedido de atenção primeiro)
+        const grupos = [];
+        const porChave = {};
+        for (const w of lista) {
+            const k = chaveGrupo(w);
+            if (porChave[k] === undefined) {
+                porChave[k] = grupos.length;
+                grupos.push([]);
+            }
+            grupos[porChave[k]].push(w);
+        }
+        const ordenada = [].concat(...grupos);
+        if (ordenada.length !== minimizadas.length || ordenada.some((w, i) => w !== minimizadas[i]))
         {
             cartaoSobMouse = null;  // o cartão sob o mouse pode ter mudado de janela
-            minimizadas = lista;
+            const info = [];
+            let y = 0;
+            grupos.forEach((g, gi) => g.forEach((w, pi) => {
+                if (info.length > 0)
+                    y += pi === 0 ? espacoLeque : espacoGrupo;
+                info.push({ grupo: gi, pos: pi, tam: g.length, yLeque: y });
+                y += alturaMiniatura + 22;
+            }));
+            infoCartas = info;
+            nGrupos = grupos.length;
+            minimizadas = ordenada;
         }
         sobreposta = cobre;
         menuAberto = menu;
@@ -222,7 +250,16 @@ QW.Window {
         }
     }
 
+    function chaveGrupo(w) {
+        return w.resourceClass || ("id:" + w.internalId);
+    }
+
+    // Traz o grupo (app) inteiro de volta; a janela clicada fica por cima.
     function restaurar(w) {
+        const k = chaveGrupo(w);
+        for (const o of minimizadas.slice())
+            if (o !== w && chaveGrupo(o) === k)
+                o.minimized = false;
         w.minimized = false;
         Workspace.activeWindow = w;
     }
@@ -296,7 +333,11 @@ QW.Window {
                     readonly property var janela: index < palco.n ? palco.minimizadas[index] : null
                     visible: janela !== null
                     readonly property real esc: palco.escalaLeque
-                    readonly property int profundidade: Math.min(index, palco.maxNaPilha - 1)
+                    readonly property var info: index < palco.infoCartas.length ? palco.infoCartas[index] : null
+                    readonly property int grupo: info ? info.grupo : 0
+                    readonly property bool cabeca: !info || info.pos === 0
+                    readonly property int tamGrupo: info ? info.tam : 1
+                    readonly property int profundidade: Math.min(grupo, palco.maxNaPilha - 1)
                     readonly property bool atencao: janela !== null && janela.demandsAttention
                     readonly property bool sobMouse: palco.cartaoSobMouse === cartao
 
@@ -307,12 +348,13 @@ QW.Window {
 
                     // pilha: cartas deslocadas e menores atrás; leque: coluna
                     y: palco.aberta
-                        ? index * (palco.alturaMiniatura + 22 + palco.espacoLeque) * esc
+                        ? (info ? info.yLeque : 0) * esc
                         : profundidade * palco.passoPilha
                     scale: palco.aberta
                         ? esc * (cartao.sobMouse ? 1.05 : 1.0)
                         : 1.0 - profundidade * 0.05
-                    opacity: palco.aberta || index < palco.maxNaPilha ? 1 : 0
+                    // na pilha só aparece a primeira janela de cada app
+                    opacity: palco.aberta || (cabeca && grupo < palco.maxNaPilha) ? 1 : 0
 
                     Behavior on y { NumberAnimation { duration: palco.duracao; easing.type: Easing.OutCubic } }
                     Behavior on scale { NumberAnimation { duration: palco.duracao; easing.type: Easing.OutCubic } }
@@ -365,6 +407,28 @@ QW.Window {
                         anchors.right: moldura.right
                         anchors.bottom: moldura.bottom
                         anchors.margins: -5
+                    }
+
+                    // quantas janelas o app tem na pilha
+                    Rectangle {
+                        visible: cartao.cabeca && cartao.tamGrupo > 1
+                        opacity: palco.aberta ? 0 : 1
+                        Behavior on opacity { NumberAnimation { duration: palco.duracao } }
+                        anchors.left: moldura.left
+                        anchors.top: moldura.top
+                        anchors.margins: -5
+                        width: Math.max(20, contagem.implicitWidth + 10)
+                        height: 20
+                        radius: 10
+                        color: palco.corDestaque
+                        Text {
+                            id: contagem
+                            anchors.centerIn: parent
+                            text: cartao.tamGrupo
+                            font.pointSize: 8
+                            font.bold: true
+                            color: "white"
+                        }
                     }
 
                     Text {
