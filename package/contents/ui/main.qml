@@ -26,6 +26,10 @@ QW.Window {
     // Kirigami.Theme não segue o tema dentro do KWin; cor fixa.
     readonly property color corDestaque: "#4a90d9"
     readonly property color corAtencao: "#f0a030"
+    // Modo palco (como o Stage Manager): ativar uma janela manda as outras
+    // da área atual para a pilha. Liga com:
+    //   kwriteconfig6 --file kwinrc --group Script-org.sylvio.palco --key ModoPalco true
+    readonly property bool modoPalco: KWin.readConfig("ModoPalco", false)
     // -----------------
 
     property var minimizadas: []
@@ -201,6 +205,23 @@ QW.Window {
         menuAberto = menu;
     }
 
+    // Modo palco: a janela ativada fica sozinha em cena (com as outras do
+    // mesmo app); o resto vai minimizado para a pilha. Diálogos, janelas
+    // "sempre acima" (ex.: picture-in-picture) e transientes ficam de fora.
+    function trocarCena(ativa) {
+        if (!modoPalco || !relevante(ativa) || ativa.transient || ativa.minimized || !naAreaAtual(ativa))
+            return;
+        const ordem = Workspace.stackingOrder;
+        for (let i = 0; i < ordem.length; i++) {
+            const w = ordem[i];
+            if (w === ativa || !relevante(w) || w.minimized || !w.minimizable || w.transient || w.keepAbove)
+                continue;
+            if (w.resourceClass === ativa.resourceClass || !naAreaAtual(w))
+                continue;
+            w.minimized = true;
+        }
+    }
+
     function restaurar(w) {
         w.minimized = false;
         Workspace.activeWindow = w;
@@ -221,7 +242,10 @@ QW.Window {
             palco.atualizar();
         }
         function onCurrentDesktopChanged() { palco.atualizar(); }
-        function onWindowActivated() { palco.atualizar(); }
+        function onWindowActivated(w) {
+            palco.trocarCena(w);
+            palco.atualizar();
+        }
     }
 
     Item {

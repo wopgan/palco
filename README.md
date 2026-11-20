@@ -18,6 +18,10 @@ Alt+Tab, e o que está minimizado fica à vista no palco.
   laranja piscando até você abrir a janela.
 - **Sites também avisam**: quando o contador `(n)` no título de uma janela
   minimizada aumenta (WhatsApp Web, Gmail, Discord...), conta como pedido de atenção.
+- **Some com o menu em tela cheia** (painel de aplicativos do Plasma) aberto.
+- **Modo palco** (opcional): ativar uma janela manda as outras da área atual para
+  a pilha, como no Stage Manager. Janelas do mesmo app ficam juntas em cena;
+  diálogos e janelas "sempre acima" (picture-in-picture) ficam de fora.
 
 ![Leque aberto](screenshots/leque.png)
 ![Pedido de atenção](screenshots/atencao.png)
@@ -36,6 +40,12 @@ ou pelo terminal:
 ```sh
 kwriteconfig6 --file kwinrc --group Plugins --key org.sylvio.palcoEnabled true
 qdbus6 org.kde.KWin /KWin reconfigure
+```
+
+Para ligar o modo palco (vale após sair/entrar na sessão):
+
+```sh
+kwriteconfig6 --file kwinrc --group Script-org.sylvio.palco --key ModoPalco true
 ```
 
 Para atualizar: `kpackagetool6 --type=KWin/Script -u package` e saia/entre na sessão.
