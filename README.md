@@ -9,7 +9,8 @@ Alt+Tab, e o que está minimizado fica à vista no palco.
 
 ## O que faz
 
-- **Pilha na lateral**, sem fundo e translúcida em repouso. Mouse em cima abre o leque.
+- **Coluna na lateral**, sem fundo e translúcida em repouso: um item por grupo, e os
+  grupos aparecem como um monte de cartas. Mouse em cima abre o leque com todas as janelas.
 - **Clique** restaura e foca a janela. **Botão do meio** fecha.
 - **Recolhe sozinho** quando alguma janela cobre a faixa; a borda fica vazia e
   encostar o mouse nela abre o palco de novo.
@@ -24,6 +25,10 @@ Alt+Tab, e o que está minimizado fica à vista no palco.
 - **Modo palco** (opcional): ativar uma janela manda as outras da área atual para
   a pilha, como no Stage Manager. Janelas do mesmo app ficam juntas em cena;
   diálogos e janelas "sempre acima" (picture-in-picture) ficam de fora.
+- **Cenas montadas na mão**: Shift+clique num cartão, ou arrastá-lo para fora do
+  palco, junta aquele app à cena atual (navegador + terminal, por exemplo). A cena
+  vai e volta da pilha inteira, num monte com selo verde. Minimizar uma janela na
+  mão tira ela da cena. As cenas ficam só em memória e somem ao sair da sessão.
 
 ![Leque aberto](screenshots/leque.png)
 ![Pedido de atenção](screenshots/atencao.png)
@@ -58,6 +63,8 @@ topo de `package/contents/ui/main.qml`.
 ## Limitações
 
 - Testado no Plasma 6 / KWin 6.8 com Wayland.
+- O "mouse em cima" vem da posição do cursor no KWin, e não do hover do Qt: com o
+  hover, o KWin 6.8 (Qt 6.12) caía em `QQuickItem::mapFromScene`.
 - Um monitor por vez: mostra as minimizadas do monitor ativo.
 - Sites só avisam se a aba com o contador for a aba ativa da janela minimizada.
   O WhatsApp Web conta conversas não lidas, não mensagens: uma segunda mensagem

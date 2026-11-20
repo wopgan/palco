@@ -16,8 +16,9 @@ QW.Window {
     readonly property int margem: 18
     readonly property int espacoLeque: 14
     readonly property int espacoGrupo: 4      // entre janelas do mesmo app no leque
-    readonly property int passoPilha: 30      // deslocamento entre cartas na pilha
-    readonly property int maxNaPilha: 4       // cartas visíveis na pilha
+    readonly property int passoMonte: 30      // deslocamento entre cartas de um grupo em repouso (deixa o ícone de cada uma à vista)
+    readonly property int maxNoMonte: 3       // cartas visíveis no monte de um grupo
+    readonly property int espacoRepouso: 12   // entre itens da coluna em repouso
     readonly property int maxCartas: 40       // cartões fixos (nunca recriados)
     readonly property int larguraRecolhida: 10
     readonly property int invasaoMinima: 60   // px de janela sobre a pilha para recolher
@@ -47,8 +48,12 @@ QW.Window {
     // cena); minimizar na mão tira a janela da cena
     property var minimizadasPeloPalco: ({})
     property var cartaoArrastado: null
+    // janela guardada no início do arrasto: se a pilha mudar no meio dele,
+    // o cartão passa a mostrar outra janela
+    property var janelaArrastada: null
     property bool arrastandoFora: false
     property int nGrupos: 0
+    property int alturaRepousoBruta: 0
     property var cartaoSobMouse: null
     // contador "(n)" do título por janela (WhatsApp Web, Gmail...): sites
     // não pedem atenção ao KWin, então o aumento do contador conta como pedido.
@@ -57,7 +62,12 @@ QW.Window {
     // menu em tela cheia do Plasma (painel de aplicativos) aberto: o Palco
     // some (fica com 1 px) para não ficar por cima do menu.
     property bool menuAberto: false
-    readonly property bool aberta: hover.hovered || segurarAberta.running || cartaoArrastado !== null
+    // Mouse em cima vem da posição do cursor no KWin, não do hover do Qt:
+    // a entrega de hover às janelas QML do KWin é onde ele cai
+    // (QQuickItem::mapFromScene, crashes de 19 e 20/11/2026).
+    property bool mouseDentro: false
+    property var janelaPropria: null
+    readonly property bool aberta: mouseDentro || segurarAberta.running || cartaoArrastado !== null
     readonly property bool recolhida: sobreposta && !aberta && !espiada.running
     readonly property int nAtencao: minimizadas.filter(w => w.demandsAttention).length
     readonly property bool pedeAtencao: nAtencao > 0
@@ -76,7 +86,9 @@ QW.Window {
 
     readonly property int alturaCartao: alturaMiniatura + (aberta ? 22 : 0)
     readonly property int n: minimizadas.length
-    readonly property int alturaPilha: alturaMiniatura + Math.max(0, Math.min(nGrupos, maxNaPilha) - 1) * passoPilha
+    // Em repouso: coluna com um item por grupo; grupos viram um monte.
+    readonly property real escalaRepouso: area ? Math.min(1, (area.height - margem * 2) / Math.max(1, alturaRepousoBruta)) : 1
+    readonly property int alturaPilha: Math.ceil(alturaRepousoBruta * escalaRepouso)
     readonly property int alturaLequeBruta: n * (alturaMiniatura + 22) + Math.max(0, nGrupos - 1) * espacoLeque + Math.max(0, n - nGrupos) * espacoGrupo
     // se não couber na tela, as cartas do leque encolhem
     readonly property real escalaLeque: area ? Math.min(1, (area.height - margem * 2) / Math.max(1, alturaLequeBruta)) : 1
@@ -113,12 +125,23 @@ QW.Window {
         id: segurarAberta
         interval: 250
     }
-    Connections {
-        target: hover
-        function onHoveredChanged() {
-            if (!hover.hovered)
-                segurarAberta.restart();
+    onMouseDentroChanged: if (!mouseDentro) segurarAberta.restart()
+
+    function atualizarCursor() {
+        const w = janelaPropria;
+        if (!w || w.deleted) {
+            mouseDentro = false;
+            return;
         }
+        const c = Workspace.cursorPos;
+        const g = w.frameGeometry;
+        const lx = c.x - g.x;
+        const ly = c.y - g.y;
+        mouseDentro = !escondido && lx >= 0 && ly >= 0 && lx < g.width && ly < g.height;
+        if (aberta && mouseDentro && !cartaoArrastado)
+            cartaoSobMouse = toqueGeral.cartaoEm(lx - palcoCartas.x, ly - palcoCartas.y);
+        else if (!cartaoArrastado)
+            cartaoSobMouse = null;
     }
 
     // x/y declarativos com valor 0 não marcam a posição como explícita
@@ -189,6 +212,7 @@ QW.Window {
         for (let i = ordem.length - 1; i >= 0; i--) {
             const w = ordem[i];
             if (w && w.caption === tituloProprio) {
+                janelaPropria = w;
                 ajustarPropria(w);
                 continue;
             }
@@ -233,12 +257,21 @@ QW.Window {
             cartaoSobMouse = null;  // o cartão sob o mouse pode ter mudado de janela
             const info = [];
             let y = 0;
-            grupos.forEach((g, gi) => g.forEach((w, pi) => {
-                if (info.length > 0)
-                    y += pi === 0 ? espacoLeque : espacoGrupo;
-                info.push({ grupo: gi, pos: pi, tam: g.length, yLeque: y, cena: chaveGrupo(w).startsWith("cena:") });
-                y += alturaMiniatura + 22;
-            }));
+            let yr = 0;
+            grupos.forEach((g, gi) => {
+                if (gi > 0)
+                    yr += espacoRepouso;
+                g.forEach((w, pi) => {
+                    if (info.length > 0)
+                        y += pi === 0 ? espacoLeque : espacoGrupo;
+                    info.push({ grupo: gi, pos: pi, tam: g.length, yLeque: y,
+                                yRepouso: yr + Math.min(pi, maxNoMonte - 1) * passoMonte,
+                                cena: chaveGrupo(w).startsWith("cena:") });
+                    y += alturaMiniatura + 22;
+                });
+                yr += alturaMiniatura + (Math.min(g.length, maxNoMonte) - 1) * passoMonte;
+            });
+            alturaRepousoBruta = yr;
             infoCartas = info;
             nGrupos = grupos.length;
             minimizadas = ordenada;
@@ -335,7 +368,10 @@ QW.Window {
         interval: 350
         running: true
         repeat: true
-        onTriggered: palco.atualizar()
+        onTriggered: {
+            palco.atualizar();
+            palco.atualizarCursor();  // a janela muda de tamanho sem o cursor mexer
+        }
     }
     Connections {
         target: Workspace
@@ -350,6 +386,7 @@ QW.Window {
             palco.atualizar();
         }
         function onCurrentDesktopChanged() { palco.atualizar(); }
+        function onCursorPosChanged() { palco.atualizarCursor(); }
         function onWindowActivated(w) {
             palco.trocarCena(w);
             palco.atualizar();
@@ -358,10 +395,9 @@ QW.Window {
 
     Item {
         anchors.fill: parent
-        HoverHandler { id: hover }
 
         // alça quando recolhida: só aparece com pedido de atenção;
-        // sem ele a faixa fica invisível mas ainda abre o palco no hover
+        // sem ele a faixa fica invisível mas ainda abre o palco com o mouse
         Rectangle {
             id: alca
             visible: palco.recolhida && palco.pedeAtencao
@@ -410,7 +446,7 @@ QW.Window {
                     readonly property int tamGrupo: info ? info.tam : 1
                     readonly property bool emCena: info !== null && info.cena
                     readonly property bool arrastado: palco.cartaoArrastado === cartao
-                    readonly property int profundidade: Math.min(grupo, palco.maxNaPilha - 1)
+                    readonly property int profundidade: info ? Math.min(info.pos, palco.maxNoMonte - 1) : 0
                     readonly property bool atencao: janela !== null && janela.demandsAttention
                     readonly property bool sobMouse: palco.cartaoSobMouse === cartao
 
@@ -419,15 +455,15 @@ QW.Window {
                     transformOrigin: Item.Top
                     z: palco.n - index
 
-                    // pilha: cartas deslocadas e menores atrás; leque: coluna
+                    // repouso: coluna de grupos, cada grupo um monte (cartas
+                    // deslocadas e menores atrás); leque: todas as janelas
                     y: palco.aberta
                         ? (info ? info.yLeque : 0) * esc
-                        : profundidade * palco.passoPilha
+                        : (info ? info.yRepouso : 0) * palco.escalaRepouso
                     scale: palco.aberta
                         ? esc * (cartao.sobMouse ? 1.05 : 1.0)
-                        : 1.0 - profundidade * 0.05
-                    // na pilha só aparece a primeira janela de cada app
-                    opacity: palco.aberta || (cabeca && grupo < palco.maxNaPilha) ? 1 : 0
+                        : palco.escalaRepouso * (1.0 - profundidade * 0.05)
+                    opacity: palco.aberta || (info && info.pos < palco.maxNoMonte) ? 1 : 0
 
                     Behavior on y { NumberAnimation { duration: palco.duracao; easing.type: Easing.OutCubic } }
                     Behavior on scale { NumberAnimation { duration: palco.duracao; easing.type: Easing.OutCubic } }
@@ -526,13 +562,13 @@ QW.Window {
                 }
             }
 
-            // Uma só área de mouse, fixa, para o palco inteiro (cartões sem
-            // hover próprio), por causa dos crashes do KWin de 19/11/2026.
+            // Uma só área de mouse, fixa, para o palco inteiro, e sem hover
+            // (só clique e arrasto), por causa dos crashes do KWin de 19 e 20/11.
             MouseArea {
                 id: toqueGeral
                 anchors.fill: parent
                 z: 10000
-                hoverEnabled: true
+                hoverEnabled: false
                 enabled: palco.aberta
                 acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                 // cartão de cima primeiro (índice menor = z maior)
@@ -547,31 +583,32 @@ QW.Window {
                     }
                     return null;
                 }
-                onExited: palco.cartaoSobMouse = null
                 onEnabledChanged: if (!enabled) palco.cartaoSobMouse = null
                 // arrastar um cartão para fora do palco junta à cena atual
                 onPressed: (ev) => {
-                    if (ev.button === Qt.LeftButton)
+                    if (ev.button === Qt.LeftButton) {
                         palco.cartaoArrastado = cartaoEm(ev.x, ev.y);
+                        palco.janelaArrastada = palco.cartaoArrastado ? palco.cartaoArrastado.janela : null;
+                    }
                 }
                 onPositionChanged: (ev) => {
                     if (palco.cartaoArrastado)
                         palco.arrastandoFora = ev.x > width + palco.margem;
-                    else
-                        palco.cartaoSobMouse = cartaoEm(ev.x, ev.y);
                 }
                 onReleased: (ev) => {
-                    const c = palco.cartaoArrastado;
+                    const w = palco.janelaArrastada;
                     const fora = palco.arrastandoFora;
                     palco.cartaoArrastado = null;
+                    palco.janelaArrastada = null;
                     palco.arrastandoFora = false;
-                    if (fora && c && c.janela) {
+                    if (fora && w && !w.deleted && w.minimized) {
                         palco.cartaoSobMouse = null;
-                        palco.juntarNaCena(c.janela);
+                        palco.juntarNaCena(w);
                     }
                 }
                 onCanceled: {
                     palco.cartaoArrastado = null;
+                    palco.janelaArrastada = null;
                     palco.arrastandoFora = false;
                 }
                 onClicked: (ev) => {
