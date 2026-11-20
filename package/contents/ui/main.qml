@@ -33,6 +33,12 @@ QW.Window {
     // da área atual para a pilha. Liga com:
     //   kwriteconfig6 --file kwinrc --group Script-org.sylvio.palco --key ModoPalco true
     readonly property bool modoPalco: KWin.readConfig("ModoPalco", false)
+    // Janelas "de passagem" que não trocam a cena nem são mandadas para a
+    // pilha: trecho do app (resourceClass/resourceName/desktopFileName),
+    // separado por vírgula. Chave Imunes no mesmo grupo do kwinrc.
+    readonly property var imunes: String(KWin.readConfig("Imunes",
+        "spectacle,portal,polkit,kdialog,ksecretd,kwallet,pinentry,zenity"))
+        .toLowerCase().split(",").map(x => x.trim()).filter(x => x.length > 0)
     // -----------------
 
     property var minimizadas: []
@@ -283,15 +289,27 @@ QW.Window {
     // Modo palco: a janela ativada fica sozinha em cena (com as outras do
     // mesmo app); o resto vai minimizado para a pilha. Diálogos, janelas
     // "sempre acima" (ex.: picture-in-picture) e transientes ficam de fora.
+    // Diálogos (transientes/modais: Salvar, Abrir, Configurar...) e apps da
+    // lista Imunes (Spectacle, seletor de arquivos do portal, senha...)
+    // não mexem na cena e nunca vão para a pilha sozinhos.
+    function imune(w) {
+        if (!w || w.transient || w.modal)
+            return true;
+        const nome = ((w.resourceClass || "") + " " + (w.resourceName || "") + " " + (w.desktopFileName || "")).toLowerCase();
+        return imunes.some(x => nome.indexOf(x) >= 0);
+    }
+
     function trocarCena(ativa) {
-        if (!modoPalco || !relevante(ativa) || ativa.transient || ativa.minimized || !naAreaAtual(ativa))
+        if (!modoPalco || !relevante(ativa) || imune(ativa) || ativa.minimized || !naAreaAtual(ativa))
             return;
         const ordem = Workspace.stackingOrder;
         for (let i = 0; i < ordem.length; i++) {
             const w = ordem[i];
-            if (w === ativa || !relevante(w) || w.minimized || !w.minimizable || w.transient || w.keepAbove)
+            if (w === ativa || !relevante(w) || w.minimized || !w.minimizable || imune(w) || w.keepAbove)
                 continue;
-            if (chaveGrupo(w) === chaveGrupo(ativa) || !naAreaAtual(w))
+            // mesmo app fica junto mesmo que só um esteja numa cena
+            // (ex.: a janela de configurações do Konsole e o Konsole)
+            if (chaveGrupo(w) === chaveGrupo(ativa) || w.resourceClass === ativa.resourceClass || !naAreaAtual(w))
                 continue;
             minimizadasPeloPalco[String(w.internalId)] = true;
             w.minimized = true;
@@ -449,6 +467,14 @@ QW.Window {
                     readonly property int profundidade: info ? Math.min(info.pos, palco.maxNoMonte - 1) : 0
                     readonly property bool atencao: janela !== null && janela.demandsAttention
                     readonly property bool sobMouse: palco.cartaoSobMouse === cartao
+                    property var janelaMostrada: null
+                    onJanelaChanged: {
+                        if (janela === janelaMostrada)
+                            return;
+                        janelaMostrada = janela;
+                        miniatura.active = false;
+                        miniatura.active = Qt.binding(() => cartao.janela !== null);
+                    }
 
                     width: palco.larguraCartao
                     height: palco.alturaMiniatura + 22
@@ -503,11 +529,19 @@ QW.Window {
                                 ? palco.corDestaque
                                 : Qt.rgba(1, 1, 1, 0.12)
 
-                        WindowThumbnail {
+                        // O WindowThumbnail do KWin, ao trocar de client, mantém a
+                        // imagem antiga até a janela nova ser redesenhada, e uma
+                        // minimizada não redesenha: o cartão mostrava a miniatura
+                        // de outra janela. Por isso a miniatura é recriada sempre
+                        // que o cartão passa a mostrar outra janela.
+                        Loader {
+                            id: miniatura
                             anchors.fill: parent
                             anchors.margins: 5
-                            client: cartao.janela
-                            visible: cartao.janela !== null
+                            active: cartao.janela !== null
+                            sourceComponent: WindowThumbnail {
+                                client: cartao.janela
+                            }
                         }
                     }
 
