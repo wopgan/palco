@@ -34,6 +34,9 @@ QW.Window {
     // não pedem atenção ao KWin, então o aumento do contador conta como pedido.
     property var contadores: ({})
     property bool sobreposta: false
+    // menu em tela cheia do Plasma (painel de aplicativos) aberto: o Palco
+    // some (fica com 1 px) para não ficar por cima do menu.
+    property bool menuAberto: false
     readonly property bool aberta: hover.hovered || segurarAberta.running
     readonly property bool recolhida: sobreposta && !aberta && !espiada.running
     readonly property int nAtencao: minimizadas.filter(w => w.demandsAttention).length
@@ -71,8 +74,9 @@ QW.Window {
 
     // A janela só ocupa o tamanho do conteúdo (o KWin não aceita máscara),
     // para não roubar cliques das janelas de baixo.
-    readonly property int larguraAlvo: n === 0 ? 1 : recolhida ? larguraRecolhida : larguraCartao + margem * 2
-    readonly property int alturaAlvo: n === 0 ? 1 : recolhida ? Math.min(area ? area.height : 0, 200) : alturaConteudo + margem * 2
+    readonly property bool escondido: n === 0 || menuAberto
+    readonly property int larguraAlvo: escondido ? 1 : recolhida ? larguraRecolhida : larguraCartao + margem * 2
+    readonly property int alturaAlvo: escondido ? 1 : recolhida ? Math.min(area ? area.height : 0, 200) : alturaConteudo + margem * 2
     onLarguraAlvoChanged: posicionar()
     onAlturaAlvoChanged: atrasoEncolher.restart()
     onAreaChanged: posicionar()
@@ -128,6 +132,21 @@ QW.Window {
         if (!w.onAllDesktops) w.onAllDesktops = true;
     }
 
+    // Painel de aplicativos (kickerdash) e afins: janela do plasmashell,
+    // que não é painel nem fundo, cobrindo quase a tela toda.
+    function ehMenuTelaCheia(w) {
+        if (!w || w.minimized || w.deleted || w.dock || w.desktopWindow)
+            return false;
+        const classe = (w.resourceClass || "") + " " + (w.desktopFileName || "");
+        if (classe.indexOf("plasmashell") < 0)
+            return false;
+        if (w.output && Workspace.activeScreen && w.output.name !== Workspace.activeScreen.name)
+            return false;
+        const g = w.frameGeometry;
+        const t = w.output ? w.output.geometry : area;
+        return g.width * g.height >= t.width * t.height * 0.9;
+    }
+
     function verificarContador(w) {
         const m = /^\((\d+)\)/.exec(w.caption || "");
         const atual = m ? parseInt(m[1]) : 0;
@@ -141,6 +160,7 @@ QW.Window {
     function atualizar() {
         const lista = [];
         let cobre = false;
+        let menu = false;
         // área de referência: a pilha no centro da borda
         const faixaH = alturaPilha + margem * 2;
         const faixa = Qt.rect(area.x, area.y + (area.height - faixaH) / 2, larguraCartao + margem * 2, faixaH);
@@ -149,6 +169,10 @@ QW.Window {
             const w = ordem[i];
             if (w && w.caption === tituloProprio) {
                 ajustarPropria(w);
+                continue;
+            }
+            if (ehMenuTelaCheia(w)) {
+                menu = true;
                 continue;
             }
             if (!relevante(w) || !naAreaAtual(w))
@@ -174,6 +198,7 @@ QW.Window {
             minimizadas = lista;
         }
         sobreposta = cobre;
+        menuAberto = menu;
     }
 
     function restaurar(w) {
@@ -227,7 +252,7 @@ QW.Window {
 
         Item {
             id: palcoCartas
-            visible: !palco.recolhida
+            visible: !palco.recolhida && !palco.menuAberto
             opacity: palco.aberta || palco.pedeAtencao || espiada.running ? 1 : palco.opacidadeRepouso
             Behavior on opacity { NumberAnimation { duration: palco.duracao } }
             x: palco.margem
