@@ -55,6 +55,20 @@ Para ligar o modo palco (vale após sair/entrar na sessão):
 kwriteconfig6 --file kwinrc --group Script-org.sylvio.palco --key ModoPalco true
 ```
 
+### Animação (opcional)
+
+Efeito do KWin à parte, em `efeito/` (baseado no Squash): ao minimizar, a janela voa
+para a coluna do Palco; ao clicar num cartão, sai dele e volta ao lugar. Cenas vão
+em cascata. Substitui o Squash/Lâmpada mágica (mesma categoria "minimizar").
+
+```sh
+kpackagetool6 --type=KWin/Effect -i efeito
+kwriteconfig6 --file kwinrc --group Plugins --key palco_animacaoEnabled true
+qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect palco_animacao
+```
+
+Efeito em JS não tem o cache do QML: depois de `-u`, basta `unloadEffect` + `loadEffect`.
+
 Para atualizar: `kpackagetool6 --type=KWin/Script -u package` e saia/entre na sessão.
 
 Os ajustes (tamanho das cartas, transparência, tempo da espiada, cores) ficam no

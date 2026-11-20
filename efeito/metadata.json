@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "KWin/Effect",
+    "KPlugin": {
+        "Authors": [{ "Name": "Sylvio Lima" }],
+        "Category": "Appearance",
+        "Description": "Minimizar/restaurar voando para a coluna do Palco",
+        "EnabledByDefault": false,
+        "Id": "palco_animacao",
+        "License": "GPL",
+        "Name": "Palco: animação",
+        "Version": "1.0"
+    },
+    "X-KDE-Ordering": 60,
+    "X-KWin-Exclusive-Category": "minimize",
+    "X-Plasma-API": "javascript"
+}
